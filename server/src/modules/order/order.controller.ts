@@ -5,6 +5,7 @@ import { Product } from '../product/product.model';
 import { serializeOrder } from './order.serializer';
 import { catchAsync } from '../../shared/utils/catchAsync';
 import { AppError } from '../../middlewares/errorHandler';
+import { Address } from '../address/address.model';
 
 interface PreparedOrderItem {
   productId: Types.ObjectId;
@@ -28,6 +29,29 @@ export const createOrder = catchAsync(async (req: Request, res: Response) => {
       throw new AppError('customerId is required when creating an order as staff', 400);
     }
     customerId = req.body.customerId;
+  }
+
+  let shippingAddressSnapshot;
+  if (req.body.shippingAddressId) {
+    const address = await Address.findOne({
+      _id: req.body.shippingAddressId,
+      organizationId,
+      customerId, // must belong to the customer this order is FOR, not just anyone in the org
+    });
+
+    if (!address) {
+      throw new AppError('Shipping address not found for this customer', 404);
+    }
+
+    shippingAddressSnapshot = {
+      label: address.label,
+      line1: address.line1,
+      line2: address.line2,
+      city: address.city,
+      state: address.state,
+      postalCode: address.postalCode,
+      country: address.country,
+    };
   }
 
   const productIds = items.map((i: { productId: string }) => i.productId);
@@ -78,6 +102,7 @@ export const createOrder = catchAsync(async (req: Request, res: Response) => {
     items: orderItems,
     status: 'pending',
     totalAmount,
+    shippingAddressSnapshot,
   });
 
   res.status(201).json({ order: serializeOrder(order) });
@@ -134,14 +159,29 @@ export const getOrder = catchAsync(async (req: Request, res: Response) => {
 
 export const updateOrderStatus = catchAsync(async (req: Request, res: Response) => {
   const organizationId = req.user!.organizationId;
-  if (!organizationId) {
-    throw new AppError('No organization context found for this user', 403);
-  }
   const { status } = req.body;
 
   const order = await Order.findOne({ _id: req.params.id, organizationId });
   if (!order) {
     throw new AppError('Order not found', 404);
+  }
+
+  const wasAlreadyCancelled = order.status === 'cancelled';
+  const isNowCancelled = status === 'cancelled';
+
+  if (isNowCancelled && !wasAlreadyCancelled) {
+    if (!['pending', 'confirmed'].includes(order.status)) {
+      throw new AppError(
+        `Cannot cancel an order with status "${order.status}"`,
+        400
+      );
+    }
+
+    await Promise.all(
+      order.items.map((item) =>
+        Product.updateOne({ _id: item.productId }, { $inc: { stock: item.quantity } })
+      )
+    );
   }
 
   order.status = status;

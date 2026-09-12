@@ -3,10 +3,18 @@ import { Product } from './product.model';
 import { serializeProduct } from './product.serializer';
 import { catchAsync } from '../../shared/utils/catchAsync';
 import { AppError } from '../../middlewares/errorHandler';
+import { Category } from '../category/category.model';
 
 export const createProduct = catchAsync(async (req: Request, res: Response) => {
   const organizationId = req.user!.organizationId;
-  const { name, sku, description, price, stock, isActive } = req.body;
+  const { name, sku, description, price, stock, isActive, categoryId } = req.body;
+
+  if (categoryId) {
+    const category = await Category.findOne({ _id: categoryId, organizationId });
+    if (!category) {
+      throw new AppError('Category not found in your organization', 404);
+    }
+  }
 
   const existing = await Product.findOne({ organizationId, sku: sku.toUpperCase() });
   if (existing) {
@@ -15,6 +23,7 @@ export const createProduct = catchAsync(async (req: Request, res: Response) => {
 
   const product = await Product.create({
     organizationId,
+    categoryId,
     name,
     sku,
     description,
@@ -95,6 +104,17 @@ export const updateProduct = catchAsync(async (req: Request, res: Response) => {
     });
     if (existing) {
       throw new AppError('A product with this SKU already exists in your organization', 409);
+    }
+  }
+
+  if (req.body.categoryId) {
+    const category = await Category.findOne({
+      _id: req.body.categoryId,
+      organizationId,
+    });
+
+    if (!category) {
+      throw new AppError('Category not found in your organization', 404);
     }
   }
 

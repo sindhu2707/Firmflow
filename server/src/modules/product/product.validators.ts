@@ -8,6 +8,7 @@ export const createProductSchema = z.object({
     price: z.number().int('Price must be an integer (cents)').min(0),
     stock: z.number().int('Stock must be an integer').min(0).optional(),
     isActive: z.boolean().optional(),
+    categoryId: z.string().min(1).optional(),
   }),
 });
 
@@ -23,6 +24,7 @@ export const updateProductSchema = z.object({
       price: z.number().int('Price must be an integer (cents)').min(0).optional(),
       stock: z.number().int('Stock must be an integer').min(0).optional(),
       isActive: z.boolean().optional(),
+      categoryId: z.string().min(1).optional(),
     })
     .refine((data) => Object.keys(data).length > 0, {
       message: 'At least one field must be provided',

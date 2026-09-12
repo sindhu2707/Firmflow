@@ -12,6 +12,8 @@ import organizationRoutes from "./modules/organizations/organization.routes";
 import userRoutes from "./modules/users/user.routes";
 import productRoutes from './modules/product/product.routes';
 import orderRoutes from './modules/order/order.routes';
+import categoryRoutes from './modules/category/category.routes';
+import addressRoutes from './modules/address/address.routes';
 
 const app = express();
 
@@ -43,6 +45,8 @@ app.use("/api/organizations", organizationRoutes);
 app.use("/api/users", userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/addresses', addressRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

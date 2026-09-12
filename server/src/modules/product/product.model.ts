@@ -3,6 +3,7 @@ import { Schema, model, Types, Document } from 'mongoose';
 export interface IProduct extends Document {
   _id: Types.ObjectId;
   organizationId: Types.ObjectId;
+  categoryId?: Types.ObjectId;
   name: string;
   sku: string;
   description?: string;
@@ -19,6 +20,11 @@ const productSchema = new Schema<IProduct>(
       ref: 'Organization',
       required: true,
       index: true,
+    },
+    categoryId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Category',
+      required: false,
     },
     name: {
       type: String,

@@ -10,6 +10,16 @@ export interface IOrderItem {
   lineTotal: number; // cents
 }
 
+export interface IShippingAddressSnapshot {
+  label?: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state?: string;
+  postalCode: string;
+  country: string;
+}
+
 export interface IOrder extends Document {
   _id: Types.ObjectId;
   organizationId: Types.ObjectId;
@@ -18,6 +28,7 @@ export interface IOrder extends Document {
   items: IOrderItem[];
   status: OrderStatus;
   totalAmount: number;
+  shippingAddressSnapshot?: IShippingAddressSnapshot;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +40,19 @@ const orderItemSchema = new Schema<IOrderItem>(
     unitPriceSnapshot: { type: Number, required: true, min: 0 },
     quantity: { type: Number, required: true, min: 1 },
     lineTotal: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
+const shippingAddressSnapshotSchema = new Schema<IShippingAddressSnapshot>(
+  {
+    label: { type: String, trim: true },
+    line1: { type: String, required: true, trim: true },
+    line2: { type: String, trim: true },
+    city: { type: String, required: true, trim: true },
+    state: { type: String, trim: true },
+    postalCode: { type: String, required: true, trim: true },
+    country: { type: String, required: true, trim: true },
   },
   { _id: false }
 );
@@ -69,6 +93,10 @@ const orderSchema = new Schema<IOrder>(
       type: Number,
       required: true,
       min: 0,
+    },
+    shippingAddressSnapshot: {
+      type: shippingAddressSnapshotSchema,
+      required: false,
     },
   },
   { timestamps: true }

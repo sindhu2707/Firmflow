@@ -6,6 +6,7 @@ import { LayoutDashboard, Users, User, Sun, Moon, Monitor, LogOut } from 'lucide
 import { useAuthStore } from '@/store/authStore';
 import { useThemeStore } from '@/store/themeStore';
 import { useLogout } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -13,6 +14,8 @@ export function CommandPalette() {
   const user = useAuthStore((s) => s.user);
   const setTheme = useThemeStore((s) => s.setTheme);
   const logout = useLogout();
+  const canSeeTeam = user?.role === 'org_owner' || user?.role === 'employee';
+  const { data: teamData } = useTeam(canSeeTeam);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -30,8 +33,6 @@ export function CommandPalette() {
     navigate(path);
     setOpen(false);
   };
-
-  const canSeeTeam = user?.role === 'org_owner' || user?.role === 'employee';
 
   return (
     <AnimatePresence>
@@ -82,6 +83,25 @@ export function CommandPalette() {
                     <User size={16} /> Profile
                   </Command.Item>
                 </Command.Group>
+
+                                {canSeeTeam && teamData?.users && teamData.users.length > 0 && (
+                  <Command.Group heading="Team" className="text-xs font-medium text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5">
+                    {teamData.users.map((member) => (
+                      <Command.Item
+                        key={member.id}
+                        value={`${member.name} ${member.email}`}
+                        onSelect={() => go('/team')}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-foreground data-[selected=true]:bg-muted"
+                      >
+                        <User size={16} />
+                        <span className="flex-1 truncate">{member.name}</span>
+                        <span className="text-xs capitalize text-muted-foreground">
+                          {member.role.replace('_', ' ')}
+                        </span>
+                      </Command.Item>
+                    ))}
+                  </Command.Group>
+                )}
 
                 <Command.Group heading="Theme" className="text-xs font-medium text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5">
                   <Command.Item onSelect={() => { setTheme('light'); setOpen(false); }} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-foreground data-[selected=true]:bg-muted">

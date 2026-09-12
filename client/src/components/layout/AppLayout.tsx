@@ -6,7 +6,7 @@ import { useLogout } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { CommandPalette  } from '@/components/ui/CommandPalette';
-import { LayoutDashboard, Users, User, Menu, ChevronsLeft } from 'lucide-react';
+import { LayoutDashboard, Users, User, Menu, ChevronsLeft, X } from 'lucide-react';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['org_owner', 'employee', 'customer'] },
@@ -126,6 +126,90 @@ export function AppLayout() {
           </Button>
         </div>
       </motion.aside>
+
+      {/* Mobile drawer */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-black/40 md:hidden"
+              onClick={() => setMobileOpen(false)}
+            />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-card md:hidden"
+            >
+              <div className="flex h-14 items-center justify-between border-b border-border px-4">
+                <Link
+                  to="/dashboard"
+                  className="flex items-center gap-2"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
+                    F
+                  </span>
+                  <span className="text-lg font-bold text-foreground">FirmFlow</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(false)}
+                  className="rounded-md p-2 text-muted-foreground hover:bg-muted"
+                  aria-label="Close menu"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <nav className="flex-1 space-y-1 p-3">
+                {visibleItems.map((item) => {
+                  const isActive = location.pathname.startsWith(item.to);
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setMobileOpen(false)}
+                      className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/20'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <item.icon size={18} strokeWidth={2} className="shrink-0" />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </nav>
+
+              <div className="border-t border-border p-3">
+                {user && (
+                  <div className="mb-2 text-sm">
+                    <p className="font-medium text-foreground">{user.name}</p>
+                    <p className="capitalize text-muted-foreground">{user.role.replace('_', ' ')}</p>
+                  </div>
+                )}
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => {
+                    setMobileOpen(false);
+                    logout.mutate();
+                  }}
+                  isLoading={logout.isPending}
+                >
+                  Log out
+                </Button>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main section */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

@@ -15,6 +15,7 @@ export function serializeOrder(order: IOrder) {
     })),
     status: order.status,
     totalAmount: order.totalAmount,
+    shippingAddressSnapshot: order.shippingAddressSnapshot ?? null,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };

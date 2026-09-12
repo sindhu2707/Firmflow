@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const createOrderSchema = z.object({
   body: z.object({
     customerId: z.string().min(1).optional(), // optional: customer ordering for themselves omits this
+    shippingAddressId: z.string().min(1).optional(),
     items: z
       .array(
         z.object({
