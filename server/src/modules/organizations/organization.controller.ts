@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { Organization } from "./organization.model";
 import { User } from "../users/user.model";
+import { Plan } from "../plan/plan.model";
+import { Subscription } from "../subscription/subscription.model";
 import { generateSlug } from "../../shared/utils/slug";
 import { catchAsync } from "../../shared/utils/catchAsync";
 import { AppError } from "../../middlewares/errorHandler";
@@ -33,6 +35,21 @@ export const createOrganization = catchAsync(async (req: Request, res: Response)
   existingUser.organizationId = organization.id as any;
   existingUser.role = "org_owner";
   await existingUser.save();
+
+  // Every organization starts on the Free plan. If the Free plan hasn't been
+  // seeded yet (fresh environment, seed script not run), don't block signup —
+  // log it and move on; the org just won't have a subscription doc until
+  // someone runs the seed and re-syncs, same as any other seed-data gap.
+  const freePlan = await Plan.findOne({ slug: "free", isActive: true });
+  if (freePlan) {
+    await Subscription.create({
+      organizationId: organization._id,
+      planId: freePlan._id,
+      status: "active",
+    });
+  } else {
+    console.warn("No active 'free' plan found — skipping subscription creation for new org. Run the seedPlans script.");
+  }
 
   // Re-issue access token so it carries the new organizationId
   const accessToken = signAccessToken({

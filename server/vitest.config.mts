@@ -15,6 +15,9 @@ export default defineConfig({
       MONGO_URI: 'mongodb://unused-in-tests',
       JWT_ACCESS_SECRET: 'test-access-secret',
       JWT_REFRESH_SECRET: 'test-refresh-secret',
+      RAZORPAY_KEY_ID: 'rzp_test_fake',
+      RAZORPAY_KEY_SECRET: 'fake_secret',
+      RAZORPAY_WEBHOOK_SECRET: 'fake_webhook_secret',
     },
   },
 });

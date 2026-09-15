@@ -7,6 +7,7 @@ import { requireTenant } from "../../middlewares/tenantScope";
 import { authorize } from "../../middlewares/authorize";
 import { inviteUser } from "./user.controller";
 import { inviteUserSchema } from "./user.validation";
+import { checkPlanLimit } from "../../middlewares/checkPlanLimit";
 
 const router = Router();
 
@@ -23,6 +24,7 @@ router.post(
   requireTenant,
   authorize("org_owner", "employee"),
   validate(inviteUserSchema),
+  checkPlanLimit('employees'),
   inviteUser
 );
 

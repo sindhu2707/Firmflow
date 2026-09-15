@@ -20,4 +20,12 @@ export const env = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
   },
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+  // Optional on purpose — the free plan never touches Razorpay, so the app
+  // must still boot without these. Anything that actually needs them (paid
+  // checkout, webhook verification) throws its own clear error at call time.
+  razorpay: {
+    keyId: process.env.RAZORPAY_KEY_ID,
+    keySecret: process.env.RAZORPAY_KEY_SECRET,
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
+  },
 };

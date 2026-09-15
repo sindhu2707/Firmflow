@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middlewares/authenticate';
 import { authorize } from '../../middlewares/authorize';
 import { requireTenant } from '../../middlewares/tenantScope';
+import { checkPlanLimit } from '../../middlewares/checkPlanLimit';
 import { validate } from '../../middlewares/validate';
 import {
   createProductSchema,
@@ -28,6 +29,7 @@ router.post(
   '/',
   authorize('org_owner', 'employee'),
   validate(createProductSchema),
+  checkPlanLimit('products'),
   createProduct
 );
 router.patch(
