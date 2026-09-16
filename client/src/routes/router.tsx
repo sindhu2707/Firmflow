@@ -8,6 +8,8 @@ import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { ProfilePage } from '@/pages/profile/ProfilePage';
 import { TeamPage } from '@/pages/team/TeamPage';
 import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage';
+import { BillingPage } from '@/pages/billing/BillingPage';
+import { PricingPage } from '@/pages/billing/PricingPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -51,7 +53,11 @@ export const router = createBrowserRouter([
           { path: '/profile', element: <ProfilePage /> },
           {
             element: <ProtectedRoute allowedRoles={['org_owner', 'employee']} />,
-            children: [{ path: '/team', element: <TeamPage /> }],
+            children: [
+              { path: '/team', element: <TeamPage /> },
+              { path: '/billing', element: <BillingPage /> },
+              { path: '/billing/plans', element: <PricingPage /> },
+            ],
           },
         ],
       },
