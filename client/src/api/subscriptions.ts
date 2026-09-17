@@ -1,5 +1,5 @@
 import { apiClient } from '@/api/axios';
-import type { Subscription } from '@/types';
+import type { Subscription, Plan } from '@/types';
 
 export interface CheckoutPayload {
   planId: string;
@@ -8,8 +8,15 @@ export interface CheckoutPayload {
 // `razorpay` is only present when the checkout opened a real gateway
 // subscription (i.e. the target plan isn't Free). Its absence means the
 // switch already happened locally — nothing further for the client to do.
+//
+// When `razorpay` IS present, `subscription` is the org's CURRENT (still
+// unchanged) entitlement, not the plan being purchased — the backend
+// deliberately doesn't grant the new plan until the webhook confirms the
+// card was authorized. `plan` is the target plan, for labeling the
+// checkout widget.
 export interface CheckoutResponse {
-  subscription: Subscription;
+  subscription: Subscription | null;
+  plan?: Plan;
   razorpay?: {
     subscriptionId: string;
     keyId: string;

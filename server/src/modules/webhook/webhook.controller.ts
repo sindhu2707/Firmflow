@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import Razorpay from 'razorpay';
 import { logger } from '../../config/logger';
 import { env } from '../../config/env';
-import { Subscription } from '../subscription/subscription.model';
+import { Subscription, ISubscription } from '../subscription/subscription.model';
+import { Plan } from '../plan/plan.model';
 import { Payment } from '../payment/payment.model';
 import { Invoice } from '../invoice/invoice.model';
 import { WebhookEvent } from './webhookEvent.model';
@@ -24,6 +26,7 @@ interface RazorpaySubscriptionEntity {
   status: string;
   current_start?: number; // unix seconds
   current_end?: number;
+  charge_at?: number; // unix seconds — when the next (possibly first) charge is due
   notes?: Record<string, string>;
 }
 
@@ -67,6 +70,22 @@ async function resolveSubscription(payload: RazorpayWebhookPayload['payload']) {
   }
 
   return null;
+}
+
+// The checkout endpoint deliberately does NOT write planId/status locally
+// when opening a paid Razorpay subscription — see the comment in
+// subscription.controller.ts. This is what applies that change, once a
+// webhook confirms the subscription actually got authorized. Keyed off
+// razorpaySubscriptionId so it only fires once per subscription (a plan
+// switch creates a new Razorpay subscription id, so it fires again then).
+function applyPendingPlanChange(sub: ISubscription, entity: RazorpaySubscriptionEntity) {
+  if (sub.razorpaySubscriptionId === entity.id) return;
+  const planId = entity.notes?.planId;
+  if (planId) {
+    sub.planId = new Types.ObjectId(planId);
+  }
+  sub.razorpaySubscriptionId = entity.id;
+  sub.cancelAtPeriodEnd = false;
 }
 
 export async function handleRazorpayWebhook(req: Request, res: Response) {
@@ -138,12 +157,42 @@ async function processEvent(event: RazorpayWebhookPayload) {
   const { payload } = event;
 
   switch (event.event) {
-    case 'subscription.authenticated':
+    case 'subscription.authenticated': {
+      // Fires once the customer authorizes a card — this is the FIRST
+      // point a checkout is confirmed, so it's what applies the plan
+      // change the checkout endpoint deliberately deferred.
+      const entity = payload.subscription?.entity;
+      const sub = await resolveSubscription(payload);
+      if (!sub || !entity) break;
+
+      applyPendingPlanChange(sub, entity);
+
+      const plan = await Plan.findById(sub.planId);
+      if (plan && plan.trialDays > 0) {
+        // Card verified, but Razorpay won't actually charge until
+        // `charge_at` (the trial's end) — 'activated'+'charged' land
+        // later, when that happens. See Razorpay's Test Subscriptions docs.
+        sub.status = 'trialing';
+        if (entity.charge_at) sub.trialEndsAt = toDate(entity.charge_at);
+      } else {
+        // No trial on this plan — authentication and the first charge
+        // happen together, so 'active' is correct without waiting on a
+        // separate 'activated' event.
+        sub.status = 'active';
+      }
+      if (entity.current_end) sub.currentPeriodEnd = toDate(entity.current_end);
+      await sub.save();
+      break;
+    }
+
     case 'subscription.activated': {
+      // A previously-trialing (or otherwise not-yet-active) subscription's
+      // first real billing period has started.
+      const entity = payload.subscription?.entity;
       const sub = await resolveSubscription(payload);
       if (!sub) break;
+      if (entity) applyPendingPlanChange(sub, entity);
       sub.status = 'active';
-      const entity = payload.subscription?.entity;
       if (entity?.current_end) sub.currentPeriodEnd = toDate(entity.current_end);
       await sub.save();
       break;
@@ -157,6 +206,7 @@ async function processEvent(event: RazorpayWebhookPayload) {
       const paymentEntity = payload.payment?.entity;
       const invoiceEntity = payload.invoice?.entity;
 
+      if (subEntity) applyPendingPlanChange(sub, subEntity);
       sub.status = 'active';
       if (subEntity?.current_end) sub.currentPeriodEnd = toDate(subEntity.current_end);
       await sub.save();

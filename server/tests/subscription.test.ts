@@ -94,7 +94,7 @@ describe('Subscription API', () => {
     expect(res.status).toBe(403);
   });
 
-  it('opens a Razorpay subscription for a paid plan and leaves status as "created"', async () => {
+  it('opens a Razorpay subscription for a paid plan without granting it locally', async () => {
     const paidPlan = await Plan.create(paidPlanBody);
     mockSubscriptionsCreate.mockResolvedValue({ id: 'sub_fake_123', status: 'created' });
 
@@ -104,11 +104,18 @@ describe('Subscription API', () => {
       .send({ planId: paidPlan._id.toString() });
 
     expect(res.status).toBe(201);
-    expect(res.body.subscription.status).toBe('created');
+    expect(res.body.plan.slug).toBe('starter');
     expect(res.body.razorpay.subscriptionId).toBe('sub_fake_123');
     expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ plan_id: 'plan_fake_starter_monthly', total_count: 120 })
     );
+
+    // No card has been authorized yet — nothing local should reflect the
+    // new plan. This org had no subscription doc at all before this call,
+    // and still shouldn't after it; only the webhook creates/updates one.
+    expect(res.body.subscription).toBeNull();
+    const sub = await Subscription.findOne({ organizationId: ctx.organizationId });
+    expect(sub).toBeNull();
   });
 
   it('rejects checkout for a paid plan with no razorpayPlanId set', async () => {
@@ -123,7 +130,7 @@ describe('Subscription API', () => {
     expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
   });
 
-  it('replaces an existing subscription doc rather than creating a second one', async () => {
+  it('does not grant a paid plan just because checkout was opened — org stays on Free until a webhook confirms it', async () => {
     const freePlan = await Plan.create(freePlanBody);
     const paidPlan = await Plan.create(paidPlanBody);
     mockSubscriptionsCreate.mockResolvedValue({ id: 'sub_fake_456', status: 'created' });
@@ -133,14 +140,22 @@ describe('Subscription API', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ planId: freePlan._id.toString() });
 
-    await request(app)
+    const checkoutRes = await request(app)
       .post('/api/subscriptions/checkout')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ planId: paidPlan._id.toString() });
 
+    expect(checkoutRes.status).toBe(201);
+
+    // Still exactly one doc, and it's still on Free — abandoning the
+    // Razorpay Checkout widget after this point (or never opening it at
+    // all) must not grant the paid plan's limits for free. This is the
+    // scenario the session that split checkout from the webhook exists to
+    // close: previously, planId flipped to the paid plan right here.
     const docs = await Subscription.find({ organizationId: ctx.organizationId });
     expect(docs).toHaveLength(1);
-    expect(docs[0].planId.toString()).toBe(paidPlan._id.toString());
+    expect(docs[0].planId.toString()).toBe(freePlan._id.toString());
+    expect(docs[0].razorpaySubscriptionId).toBeUndefined();
   });
 
   it('cannot cancel the free plan', async () => {
@@ -285,10 +300,17 @@ describe('Subscription API', () => {
     expect(res.status).toBe(201);
     expect(mockSubscriptionsCancel).toHaveBeenCalledWith('sub_old_starter', false);
     expect(mockSubscriptionsCreate).toHaveBeenCalled();
+    expect(res.body.plan.slug).toBe('business');
+    expect(res.body.razorpay.subscriptionId).toBe('sub_new_business');
 
+    // The new subscription is only 'created' on Razorpay's side so far —
+    // nothing local should reflect it yet. The org is still nominally on
+    // its old plan/subscription id locally until a webhook confirms the
+    // switch (even though the old Razorpay subscription was just cancelled
+    // — see the no-proration note on cancelOldRazorpaySubscription).
     const sub = await Subscription.findOne({ organizationId: ctx.organizationId });
-    expect(sub?.razorpaySubscriptionId).toBe('sub_new_business');
-    expect(sub?.planId.toString()).toBe(newPlan._id.toString());
+    expect(sub?.razorpaySubscriptionId).toBe('sub_old_starter');
+    expect(sub?.planId.toString()).toBe(oldPlan._id.toString());
   });
 
   it('does not fail checkout just because the previous Razorpay cancel call errors', async () => {
@@ -324,8 +346,12 @@ describe('Subscription API', () => {
       .send({ planId: trialPlan._id.toString() });
 
     expect(res.status).toBe(201);
-    expect(res.body.subscription.status).toBe('trialing');
-    expect(res.body.subscription.trialEndsAt).toBeTruthy();
+    expect(res.body.plan.trialDays).toBe(30);
+    // No card authorized yet — checkout does not grant 'trialing' by
+    // itself. That only happens once the subscription.authenticated
+    // webhook confirms it (see webhook.test.ts).
+    expect(res.body.subscription).toBeNull();
+    expect(await Subscription.findOne({ organizationId: ctx.organizationId })).toBeNull();
 
     const call = mockSubscriptionsCreate.mock.calls[0][0];
     expect(call.start_at).toBeGreaterThanOrEqual(before + 29 * 24 * 60 * 60);
@@ -342,8 +368,9 @@ describe('Subscription API', () => {
       .send({ planId: paidPlan._id.toString() });
 
     expect(res.status).toBe(201);
-    expect(res.body.subscription.status).toBe('created');
-    expect(res.body.subscription.trialEndsAt).toBeNull();
+    expect(res.body.plan.trialDays).toBe(0);
+    expect(res.body.subscription).toBeNull();
+    expect(await Subscription.findOne({ organizationId: ctx.organizationId })).toBeNull();
 
     const call = mockSubscriptionsCreate.mock.calls[0][0];
     expect(call.start_at).toBeUndefined();

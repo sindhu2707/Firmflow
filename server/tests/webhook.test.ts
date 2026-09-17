@@ -172,6 +172,104 @@ describe('Razorpay webhook handler', () => {
     expect(payments).toHaveLength(1);
   });
 
+  it('subscription.authenticated grants the plan and sets status to "trialing" when the plan has a trial', async () => {
+    const freePlan = await Plan.create({
+      name: 'Free',
+      slug: 'free',
+      billingCycle: 'monthly',
+      price: 0,
+      currency: 'INR',
+      limits: { firms: 1, products: 20, employees: 2 },
+    });
+    const trialPlan = await Plan.create({
+      name: 'Starter',
+      slug: 'starter-trial',
+      billingCycle: 'monthly',
+      price: 99900,
+      currency: 'INR',
+      limits: { firms: 3, products: 500, employees: 10 },
+      razorpayPlanId: 'plan_test_starter_trial',
+      trialDays: 30,
+    });
+    // Org is still on Free locally — checkout() deliberately didn't touch
+    // this doc when it opened the (not-yet-authorized) Razorpay subscription.
+    await Subscription.create({ organizationId, planId: freePlan._id, status: 'active' });
+
+    const chargeAt = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+    const body = {
+      entity: 'event',
+      event: 'subscription.authenticated',
+      payload: {
+        subscription: {
+          entity: {
+            id: 'sub_new_trial',
+            status: 'authenticated',
+            charge_at: chargeAt,
+            notes: { organizationId, planId: trialPlan._id.toString() },
+          },
+        },
+      },
+      created_at: Math.floor(Date.now() / 1000),
+    };
+
+    const res = await signedPost(body, { eventId: 'evt_auth_trial' });
+    expect(res.status).toBe(200);
+
+    // Only one doc for the org — the webhook updates the existing one,
+    // it doesn't create a second (resolveSubscription falls back to the
+    // organizationId stamped in `notes` since razorpaySubscriptionId
+    // doesn't match anything locally yet).
+    const docs = await Subscription.find({ organizationId });
+    expect(docs).toHaveLength(1);
+
+    const sub = docs[0];
+    expect(sub.planId.toString()).toBe(trialPlan._id.toString());
+    expect(sub.razorpaySubscriptionId).toBe('sub_new_trial');
+    expect(sub.status).toBe('trialing');
+    expect(sub.trialEndsAt).toBeTruthy();
+  });
+
+  it('subscription.authenticated grants the plan and sets status to "active" when the plan has no trial', async () => {
+    await Subscription.create({
+      organizationId,
+      planId: (await Plan.create({
+        name: 'Free',
+        slug: 'free-2',
+        billingCycle: 'monthly',
+        price: 0,
+        currency: 'INR',
+        limits: { firms: 1, products: 20, employees: 2 },
+      }))._id,
+      status: 'active',
+    });
+
+    // paidPlanId (from beforeEach) has trialDays: 0 (the model default) —
+    // authentication and the first charge happen together for this plan,
+    // so there's no separate trialing period to wait out.
+    const body = {
+      entity: 'event',
+      event: 'subscription.authenticated',
+      payload: {
+        subscription: {
+          entity: {
+            id: 'sub_new_no_trial',
+            status: 'authenticated',
+            notes: { organizationId, planId: paidPlanId },
+          },
+        },
+      },
+      created_at: Math.floor(Date.now() / 1000),
+    };
+
+    const res = await signedPost(body, { eventId: 'evt_auth_no_trial' });
+    expect(res.status).toBe(200);
+
+    const sub = await Subscription.findOne({ organizationId });
+    expect(sub?.planId.toString()).toBe(paidPlanId);
+    expect(sub?.razorpaySubscriptionId).toBe('sub_new_no_trial');
+    expect(sub?.status).toBe('active');
+  });
+
   it('flips status to active on subscription.activated', async () => {
     await Subscription.create({
       organizationId,

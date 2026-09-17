@@ -40,21 +40,25 @@ export function useCheckout() {
       // Free plan, or a paid->paid/paid->free switch — the backend already
       // applied it, nothing further for the client to do.
       if (!data.razorpay) {
-        queryClient.setQueryData<{ subscription: Subscription }>(['subscription'], {
-          subscription: data.subscription,
-        });
-        toast.success(`Switched to ${data.subscription.plan?.name ?? 'new plan'}`);
+        if (data.subscription) {
+          queryClient.setQueryData<{ subscription: Subscription }>(['subscription'], {
+            subscription: data.subscription,
+          });
+        }
+        toast.success(`Switched to ${data.subscription?.plan?.name ?? 'new plan'}`);
         return;
       }
 
-      // Paid plan from scratch — hand off to Razorpay's Checkout widget.
-      // The widget's onSuccess only means the card was authorized; the
-      // razorpay webhook is what actually flips the subscription to
-      // active/trialing, so we just refetch and let the server settle it.
+      // Paid plan — hand off to Razorpay's Checkout widget. `data.subscription`
+      // here is still the org's CURRENT plan; the backend deliberately
+      // doesn't grant `data.plan` (the one being purchased) until the
+      // razorpay webhook confirms the card was actually authorized. So we
+      // don't touch the subscription cache at all here — only refetch it
+      // once the widget closes, and let the server tell us what's true.
       openRazorpayCheckout({
         keyId: data.razorpay.keyId,
         subscriptionId: data.razorpay.subscriptionId,
-        planName: data.subscription.plan?.name ?? 'FirmFlow plan',
+        planName: data.plan?.name ?? 'FirmFlow plan',
         prefillName: user?.name,
         prefillEmail: user?.email,
         onSuccess: () => {

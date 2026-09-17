@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Subscription, ISubscription } from './subscription.model';
 import { Plan } from '../plan/plan.model';
 import { serializeSubscription } from './subscription.serializer';
+import { serializePlan } from '../plan/plan.serializer';
 import { catchAsync } from '../../shared/utils/catchAsync';
 import { AppError } from '../../middlewares/errorHandler';
 import { getRazorpayClient } from '../../shared/utils/razorpay';
@@ -119,34 +120,29 @@ export const checkout = catchAsync(async (req: Request, res: Response) => {
     ...(startAt ? { start_at: startAt } : {}),
   });
 
-  const subscriptionUpdate: Record<string, unknown> = {
-    organizationId,
-    planId: plan._id,
-    status: trialDays > 0 ? 'trialing' : 'created',
-    razorpaySubscriptionId: razorpaySubscription.id,
-    cancelAtPeriodEnd: false,
-  };
-  const unsetFields: Record<string, ''> = { currentPeriodEnd: '' };
-  if (startAt) {
-    subscriptionUpdate.trialEndsAt = new Date(startAt * 1000);
-  } else {
-    unsetFields.trialEndsAt = '';
-  }
-
-  const subscription = await Subscription.findOneAndUpdate(
-    { organizationId },
-    { ...subscriptionUpdate, $unset: unsetFields },
-    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
-  );
-
-  // Frontend uses razorpaySubscriptionId + keyId to open Razorpay Checkout
-  // in subscription mode. Do NOT trust a success callback from that widget
-  // to mean the subscription is active — only the webhook does that.
-  // (Note: Razorpay still requires card authorization up front even with a
-  // delayed start_at, so the checkout widget flow is identical either way —
-  // only the first *charge* is delayed, not the checkout itself.)
+  // IMPORTANT: we deliberately do NOT touch the local Subscription doc here
+  // (no planId/status/trialEndsAt write). This Razorpay subscription is
+  // only 'created' at this point — nobody has authorized a card yet, and
+  // the person could close the Checkout widget without ever doing so.
+  // Writing planId/'trialing' here would hand out the new plan's limits
+  // and features immediately, for free, to anyone who opens checkout and
+  // then abandons it — checkPlanLimit only looks at planId, not status, so
+  // it can't catch that on its own.
+  //
+  // The webhook (subscription.authenticated, keyed off the organizationId/
+  // planId we stamped into `notes` above) is what actually applies the
+  // plan change, once Razorpay confirms the card was authorized. See
+  // webhook.controller.ts's applyPendingPlanChange.
+  //
+  // Known gap: clicking "Choose plan" more than once before completing (or
+  // abandoning) a checkout creates more than one 'created' Razorpay
+  // subscription for the same target — harmless (each just goes stale on
+  // Razorpay's side) but not deduplicated.
   res.status(201).json({
-    subscription: serializeSubscription(subscription!, plan),
+    subscription: existing
+      ? serializeSubscription(existing, await Plan.findById(existing.planId))
+      : null,
+    plan: serializePlan(plan),
     razorpay: {
       subscriptionId: razorpaySubscription.id,
       keyId: env.razorpay.keyId,
