@@ -2,13 +2,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
+import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useTeam } from '@/hooks/useTeam';
 import { usersApi, type InvitePayload } from '@/api/users';
 import { TextField } from '@/components/ui/TextField';
 import { Button } from '@/components/ui/Button';
-import { getErrorMessage } from '@/lib/errors';
+import { getErrorMessage, getPlanLimitError } from '@/lib/errors';
 import type { TeamMember, TeamResponse } from '@/types';
 
 const inviteSchema = z.object({
@@ -22,6 +23,7 @@ type InviteFormValues = z.infer<typeof inviteSchema>;
 
 function useInviteUser() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   return useMutation({
     mutationFn: (payload: InvitePayload) => usersApi.inviteUser(payload),
@@ -48,6 +50,20 @@ function useInviteUser() {
       if (context?.previous) {
         queryClient.setQueryData(['team'], context.previous);
       }
+
+      const planLimit = getPlanLimitError(error);
+      if (planLimit) {
+        // The backend's message is already specific ("Your Starter plan
+        // allows up to 3 employees…") — just surface it with a way out.
+        toast.error(planLimit.message, {
+          action: {
+            label: 'Upgrade plan',
+            onClick: () => navigate('/billing/plans'),
+          },
+        });
+        return;
+      }
+
       toast.error(getErrorMessage(error, 'Could not invite user'));
     },
 
