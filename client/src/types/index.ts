@@ -1,6 +1,7 @@
 export type Role = 'super_admin' | 'org_owner' | 'employee' | 'customer';
 
 export interface User {
+  isActive: any;
   id: string;
   name: string;
   email: string;
@@ -48,6 +49,7 @@ export interface TeamMember {
   name: string;
   email: string;
   role: Role;
+  isActive: boolean;
 }
 
 export interface TeamResponse {
@@ -120,4 +122,27 @@ export interface Invoice {
   periodEnd: string | null;
   pdfUrl: string | null;
   createdAt: string;
+}
+
+export interface Product {
+  id: string;
+  categoryId: string | null;
+  name: string;
+  sku: string;
+  description: string;
+  price: number;
+  stock: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductsResponse {
+  products: Product[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
 }

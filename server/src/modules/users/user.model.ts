@@ -11,6 +11,7 @@ export interface IUser extends Document {
   mustChangePassword: boolean; 
   createdAt: Date;
   updatedAt: Date;
+  isActive: boolean
 }
 
 const userSchema = new Schema<IUser>(
@@ -25,6 +26,7 @@ const userSchema = new Schema<IUser>(
     },
     organizationId: { type: Schema.Types.ObjectId, ref: "Organization" },
     mustChangePassword: { type: Boolean, default: false },
+    isActive: { type: Boolean, required: true, default: true },
   },
   { timestamps: true }
 );

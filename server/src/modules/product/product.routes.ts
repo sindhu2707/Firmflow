@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middlewares/authenticate';
-import { authorize } from '../../middlewares/authorize';
+import { authorizePermission } from '../../middlewares/authorizePermission';
 import { requireTenant } from '../../middlewares/tenantScope';
 import { checkPlanLimit } from '../../middlewares/checkPlanLimit';
 import { validate } from '../../middlewares/validate';
@@ -27,20 +27,22 @@ router.get('/:id', validate(productIdParamSchema), getProduct);
 
 router.post(
   '/',
-  authorize('org_owner', 'employee'),
+  authorizePermission('products:create'),
   validate(createProductSchema),
   checkPlanLimit('products'),
   createProduct
 );
+
 router.patch(
   '/:id',
-  authorize('org_owner', 'employee'),
+  authorizePermission('products:update'),
   validate(updateProductSchema),
   updateProduct
 );
+
 router.delete(
   '/:id',
-  authorize('org_owner', 'employee'),
+  authorizePermission('products:delete'),
   validate(productIdParamSchema),
   deleteProduct
 );

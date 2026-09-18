@@ -21,6 +21,8 @@ export const getProfile = catchAsync(async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
         organizationId: user.organizationId,
+        //mustChangePassword: user.mustChangePassword,
+        isActive: user.isActive,
         createdAt: user.createdAt,
       },
     },
@@ -81,5 +83,54 @@ export const inviteUser = catchAsync(async (req: Request, res: Response) => {
   res.status(201).json({
     success: true,
     data: { user: serializeUser(newUser) },
+  });
+});
+
+export const deactivateUser = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const currentUserId = req.user!.userId;
+  const organizationId = req.user!.organizationId;
+
+  // 1. Block targeting yourself
+  if (id === currentUserId) {
+    throw new AppError("You cannot deactivate your own account", 400);
+  }
+
+  // 2. Find target user within the same organization
+  const targetUser = await User.findOne({ _id: id, organizationId });
+  if (!targetUser) {
+    throw new AppError("User not found", 404);
+  }
+
+  // 3. Block targeting another organization owner
+  if (targetUser.role === "org_owner") {
+    throw new AppError("You cannot deactivate another organization owner", 403);
+  }
+
+  targetUser.isActive = false;
+  await targetUser.save();
+
+  res.status(200).json({
+    success: true,
+    data: { user: serializeUser(targetUser) },
+  });
+});
+
+export const reactivateUser = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const organizationId = req.user!.organizationId;
+
+  // Find target user within the same organization
+  const targetUser = await User.findOne({ _id: id, organizationId });
+  if (!targetUser) {
+    throw new AppError("User not found", 404);
+  }
+
+  targetUser.isActive = true;
+  await targetUser.save();
+
+  res.status(200).json({
+    success: true,
+    data: { user: serializeUser(targetUser) },
   });
 });

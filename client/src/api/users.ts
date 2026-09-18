@@ -32,4 +32,12 @@ export const usersApi = {
     const { data } = await apiClient.post<{ user: User }>('/users/invite', payload);
     return data;
   },
+  deactivateUser: async (id: string) => {
+    const { data } = await apiClient.patch<{ user: User }>(`/users/${id}/deactivate`);
+    return data;
+  },
+  reactivateUser: async (id: string) => {
+    const { data } = await apiClient.patch<{ user: User }>(`/users/${id}/reactivate`);
+    return data;
+  },
 };

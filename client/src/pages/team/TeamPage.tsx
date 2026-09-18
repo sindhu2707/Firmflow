@@ -11,6 +11,7 @@ import { TextField } from '@/components/ui/TextField';
 import { Button } from '@/components/ui/Button';
 import { getErrorMessage, getPlanLimitError } from '@/lib/errors';
 import type { TeamMember, TeamResponse } from '@/types';
+import { useAuthStore } from '@/store/authStore';
 
 const inviteSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -37,6 +38,7 @@ function useInviteUser() {
         name: payload.name,
         email: payload.email,
         role: payload.role,
+        isActive: false
       };
 
       queryClient.setQueryData<TeamResponse>(['team'], (old) =>
@@ -78,9 +80,31 @@ function useInviteUser() {
   });
 }
 
+function useToggleUserStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, activate }: { id: string; activate: boolean }) =>
+      activate ? usersApi.reactivateUser(id) : usersApi.deactivateUser(id),
+
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Could not update this member'));
+    },
+    onSuccess: (_data, { activate }) => {
+      toast.success(activate ? 'Member reactivated' : 'Member deactivated');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['team'] });
+    },
+  });
+}
+
 export function TeamPage() {
   const { data, isLoading, isError } = useTeam();
   const inviteUser = useInviteUser();
+  const toggleStatus = useToggleUserStatus();
+  const currentUser = useAuthStore((s) => s.user);
+  const canManageTeam = currentUser?.role === 'org_owner';
 
   const {
     register,
@@ -139,6 +163,14 @@ export function TeamPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
                     Role
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+                    Status
+                  </th>
+                  {canManageTeam && (
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase text-muted-foreground">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
 
@@ -163,6 +195,31 @@ export function TeamPage() {
                         <td className="px-4 py-3 text-sm capitalize text-muted-foreground">
                           {member.role.replace('_', ' ')}
                         </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className={member.isActive ? 'text-green-600' : 'text-muted-foreground'}>
+                            {member.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+
+                        {canManageTeam && (
+                          <td className="px-4 py-3">
+                            {member.role !== 'org_owner' && (
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  isLoading={toggleStatus.isPending}
+                                  onClick={() =>
+                                    toggleStatus.mutate({ id: member.id, activate: !member.isActive })
+                                  }
+                                >
+                                  {member.isActive ? 'Deactivate' : 'Reactivate'}
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        )}
                       </motion.tr>
                     );
                   })}
